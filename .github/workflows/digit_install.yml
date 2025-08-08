@@ -330,10 +330,31 @@ jobs:
         working-directory: devops/deploy-as-code
       - name: Displaying the Loadbalancer ID
         run: |
-          LB_ID=$(kubectl get svc ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "LoadBalancer ID: $LB_ID"
-          echo "Thank you for installing DIGIT! 🙏 Your installation is complete and ready to roll! 🚀"
-          echo "Please map the LoadBalancer ID ($LB_ID) with the domain provided in input.yaml to access the DIGIT UI"
+          # Try multiple possible service names and namespaces
+          LB_ID=""
+          
+          # Try backbone namespace first
+          if kubectl get svc ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null; then
+            LB_ID=$(kubectl get svc ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          elif kubectl get svc ingress-nginx-controller -n egov -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null; then
+            LB_ID=$(kubectl get svc ingress-nginx-controller -n egov -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          else
+            echo "Warning: ingress-nginx-controller service not found in backbone or egov namespace"
+            echo "Available services in backbone namespace:"
+            kubectl get svc -n backbone
+            echo "Available services in egov namespace:"
+            kubectl get svc -n egov
+            exit 1
+          fi
+          
+          if [ -n "$LB_ID" ]; then
+            echo "LoadBalancer ID: $LB_ID"
+            echo "Thank you for installing DIGIT! 🙏 Your installation is complete and ready to roll! 🚀"
+            echo "Please map the LoadBalancer ID ($LB_ID) with the domain provided in input.yaml to access the DIGIT UI"
+          else
+            echo "Error: Could not retrieve LoadBalancer ID"
+            exit 1
+          fi
         env:
           AWS_ACCESS_KEY_ID:  ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY:  ${{ secrets.AWS_SECRET_ACCESS_KEY }}
