@@ -333,21 +333,45 @@ jobs:
           # Try multiple possible service names and namespaces
           LB_ID=""
           
-          echo "Checking for ingress-nginx-controller service..."
+          echo "Checking for ingress-nginx services..."
           
-          # Try backbone namespace first
-          echo "Checking backbone namespace..."
-          if kubectl get svc ingress-nginx-controller -n backbone >/dev/null 2>&1; then
+          # Try the correct service name in backbone namespace first
+          echo "Checking backbone namespace for ingress-nginx-ingress-nginx-controller..."
+          if kubectl get svc ingress-nginx-ingress-nginx-controller -n backbone >/dev/null 2>&1; then
             echo "Found service in backbone namespace"
-            LB_ID=$(kubectl get svc ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+            LB_ID=$(kubectl get svc ingress-nginx-ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
             if [ -n "$LB_ID" ]; then
               echo "LoadBalancer found in backbone namespace: $LB_ID"
+            fi
+          fi
+          
+          # If not found, try the old service name in backbone namespace
+          if [ -z "$LB_ID" ]; then
+            echo "Checking backbone namespace for ingress-nginx-controller..."
+            if kubectl get svc ingress-nginx-controller -n backbone >/dev/null 2>&1; then
+              echo "Found service in backbone namespace"
+              LB_ID=$(kubectl get svc ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+              if [ -n "$LB_ID" ]; then
+                echo "LoadBalancer found in backbone namespace: $LB_ID"
+              fi
             fi
           fi
           
           # If not found in backbone, try egov namespace
           if [ -z "$LB_ID" ]; then
             echo "Checking egov namespace..."
+            if kubectl get svc ingress-nginx-ingress-nginx-controller -n egov >/dev/null 2>&1; then
+              echo "Found service in egov namespace"
+              LB_ID=$(kubectl get svc ingress-nginx-ingress-nginx-controller -n egov -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+              if [ -n "$LB_ID" ]; then
+                echo "LoadBalancer found in egov namespace: $LB_ID"
+              fi
+            fi
+          fi
+          
+          # If still not found, try the old service name in egov namespace
+          if [ -z "$LB_ID" ]; then
+            echo "Checking egov namespace for ingress-nginx-controller..."
             if kubectl get svc ingress-nginx-controller -n egov >/dev/null 2>&1; then
               echo "Found service in egov namespace"
               LB_ID=$(kubectl get svc ingress-nginx-controller -n egov -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
@@ -357,9 +381,24 @@ jobs:
             fi
           fi
           
-          # If still not found, check what services exist
+          # If still not found, check what services exist and wait a bit more
           if [ -z "$LB_ID" ]; then
-            echo "Warning: ingress-nginx-controller service not found in backbone or egov namespace"
+            echo "Warning: ingress-nginx service not found, waiting 30 seconds and checking again..."
+            sleep 30
+            
+            # Try again with the correct service name
+            if kubectl get svc ingress-nginx-ingress-nginx-controller -n backbone >/dev/null 2>&1; then
+              echo "Found service in backbone namespace after waiting"
+              LB_ID=$(kubectl get svc ingress-nginx-ingress-nginx-controller -n backbone -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+              if [ -n "$LB_ID" ]; then
+                echo "LoadBalancer found in backbone namespace: $LB_ID"
+              fi
+            fi
+          fi
+          
+          # If still not found, show debugging information
+          if [ -z "$LB_ID" ]; then
+            echo "Warning: ingress-nginx service not found in backbone or egov namespace"
             echo "Available services in backbone namespace:"
             kubectl get svc -n backbone || echo "No services found in backbone namespace"
             echo ""
@@ -371,6 +410,9 @@ jobs:
             echo ""
             echo "Checking for any ingress-nginx related services..."
             kubectl get svc -A | grep -i ingress || echo "No ingress-nginx services found"
+            echo ""
+            echo "Checking for any services with 'nginx' in the name..."
+            kubectl get svc -A | grep -i nginx || echo "No nginx services found"
             exit 1
           fi
           
