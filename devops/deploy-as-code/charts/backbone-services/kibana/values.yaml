@@ -51,8 +51,8 @@ podAnnotations: {}
 
 resources:
   requests:
-    cpu: "1000m"
-    memory: "2Gi"
+    cpu: "500m"
+    memory: "1Gi"
   limits:
     cpu: "1000m"
     memory: "2Gi"
@@ -112,10 +112,19 @@ extraContainers: []
 #   image: busybox
 #   command: ['echo', 'hey']
 
-extraInitContainers: []
-# - name: dummy-init
-#   image: busybox
-#   command: ['echo', 'hey']
+extraInitContainers:
+  - name: wait-for-elasticsearch
+    image: busybox:1.35
+    command:
+      - sh
+      - -c
+      - |
+        echo "Waiting for Elasticsearch to be ready..."
+        until wget --no-verbose --tries=1 --spider https://elasticsearch-master:9200/_cluster/health || exit 1; do
+          echo "Elasticsearch is not ready yet, waiting..."
+          sleep 30
+        done
+        echo "Elasticsearch is ready!"
 
 updateStrategy:
   type: "Recreate"
@@ -162,11 +171,11 @@ ingress:
        - demo.digit.org
 
 readinessProbe:
-  failureThreshold: 3
-  initialDelaySeconds: 10
-  periodSeconds: 10
+  failureThreshold: 10
+  initialDelaySeconds: 60
+  periodSeconds: 30
   successThreshold: 3
-  timeoutSeconds: 5
+  timeoutSeconds: 30
 
 imagePullSecrets: []
 nodeSelector: {}
